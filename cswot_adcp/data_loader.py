@@ -6,7 +6,7 @@ import cswot_adcp.adcp as ad
 
 
 
-def read_data(file:Path):
+def read_data(file):
     # STA file reading
     sta = ad.read_WH300(file)
     # navigation compensation

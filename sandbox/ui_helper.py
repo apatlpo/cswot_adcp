@@ -1,3 +1,5 @@
+from ctypes import Array
+from pathlib import Path
 from typing import Tuple
 
 import cartopy.crs as ccrs
@@ -11,6 +13,7 @@ import hvplot.pandas
 import hvplot.xarray
 
 import cswot_adcp.maps as mp
+from cswot_adcp import data_loader as loader
 
 
 # pn.extension('ipywidgets')
@@ -37,9 +40,15 @@ TIME_SLICE = "Time"
 
 
 class UIDesc:
-    def __init__(self, data: xr.Dataset):
-        self.data = data
+    def __init__(self, filename_list:Array[str]):
+        self.file_selector = None
+        self.file_name = None
+        if len(filename_list) > 1:
+            raise Exception("Only one single file is supported")
         self.range_selection = True  # indicate if we use a time based selection or range type
+        self.create_loader_widget()
+        if len(filename_list)>0:
+            self.__load_file(file_name=filename_list[0])
 
     def declare_time_slider(self):
         self.frame_slider = pn.widgets.IntSlider(name='Frame Index', start=0, end=self.data.time.shape[0] - 1, value=0)
@@ -48,12 +57,14 @@ class UIDesc:
         self.range_slider = pn.widgets.IntSlider(name='Range Index', start=0, end=self.data.range.shape[0] - 1, value=0)
 
     def update_time_label(self, frame):
+        """Update datetime label, convert frame index to readable date"""
         value = self.data.time.isel(time=self.frame_slider.value)
         self.time_label = pn.widgets.StaticText(name='Current date', value=f"{value.values} (frame {frame})",
                                                 sizing_mode='stretch_width')
         return self.time_label
 
     def update_range_label(self, range_index):
+        """ Display range in meter"""
         value = self.data.range.isel(range=self.range_slider.value)
         self.range_label = pn.widgets.StaticText(name='Current range',
                                                  value=f"{value.values}m (range_index {range_index})",
@@ -61,18 +72,22 @@ class UIDesc:
         return self.range_label
 
     def get_total_amplitude(self):
+        """Return graph with magnitude on the whole file"""
         return (self.data["compensated_Mag"]
                 .hvplot(x="time", y="range", responsive=True, clim=(0, 1), height=HEIGHT, cmap="inferno")
                 .opts(invert_yaxis=True, title="velocity magnitude")
                 )
 
     def get_total_dir(self):
+        """return graph with direction on the whole file"""
         return (self.data["compensated_Dir"]
                 .hvplot(x="time", y="range", responsive=True, clim=(-180, 180), height=HEIGHT, cmap="hsv")
                 .opts(invert_yaxis=True, title="velocity direction")
                 )
 
     def get_total_corr(self):
+        """return graph with correlation on the whole file"""
+
         return (self.data["corr"].mean("beam")
                 .hvplot(x="time", y="range", responsive=True, clim=(0, 100), height=HEIGHT, cmap="hot", )
                 .opts(invert_yaxis=True, title="correlation")
@@ -80,6 +95,7 @@ class UIDesc:
 
     def __get_data_slice(self, frame: int, range_index: int, slice: str, variable_name: str, title: str,
                          ylim: Tuple[int, int]):
+        """Utility function creating a slice (on time or range) on a data set"""
         if slice == TIME_SLICE:
             selected_data = self.data[variable_name].isel(time=frame)
             if len(selected_data.shape) > 1:
@@ -97,18 +113,22 @@ class UIDesc:
                        .opts(invert_axes=False, invert_yaxis=False, title=title) * self.get_vline(frame=frame)
 
     def get_profile_amplitude(self, frame: int, range_index: int, slice: str = RANGE_SLICE):
+        """return amplitude slice"""
         return self.__get_data_slice(frame=frame, range_index=range_index, slice=slice, variable_name="compensated_Mag",
                                      title="velocity magnitude profile", ylim=(0, 1))
 
     def get_profile_direction(self, frame: int, range_index: int, slice: str = RANGE_SLICE):
+        """return direction slice"""
         return self.__get_data_slice(frame=frame, range_index=range_index, slice=slice, variable_name="compensated_Dir",
                                      title="velocity direction profile", ylim=(-180, 180))
 
     def get_profile_correlation(self, frame: int, range_index: int, slice: str = RANGE_SLICE):
+        """return correlation slice"""
         return self.__get_data_slice(frame=frame, range_index=range_index, slice=slice, variable_name="corr",
                                      title="correlation profile", ylim=(0, 200))
 
     def get_trajectory(self, frame):
+        """get a interactive map for navigation display"""
         subset = self.data[['elongitude_gps', 'elatitude_gps']]
         _df = subset.to_dataframe()
         extent = get_display_extent(self.data, buffer=0.1)
@@ -126,6 +146,7 @@ class UIDesc:
         return base * focus
 
     def get_quiver(self, range_index=0):
+        """return vectorial map (quiver) dfor a given range"""
         selected_range = self.data.isel(range=range_index)
         fig = plt.figure(figsize=(10, 10))
         extent = get_display_extent(self.data, buffer=.01)
@@ -156,19 +177,27 @@ class UIDesc:
         return mpl_pane
 
     def get_vline(self, frame):
+        """Draw a vertical line (time cursor)"""
         # retrieve time index
         time = self.data.time[frame].values
         return hv.VLine(time).opts(color="red")
 
     def get_hline(self, range_index):
+        """Draw a horizontal line (range cursor)"""
         # retrieve time index
         range = self.data.range[range_index].values
         return hv.HLine(range).opts(color="red")
 
-    def declare_widgets(self):
+    def create_loader_widget(self):
+        """create a widget for file loader"""
+        self.file_selector = pn.widgets.FileSelector(directory="..",file_pattern="*.sta",only_files=True)
+        return self.file_selector
+
+    def create_widgets(self):
+        """Create all widgets"""
+        print("create widgets")
         self.declare_time_slider()
         self.declare_range_slider()
-
         self.slice_selector = pn.widgets.RadioBoxGroup(name='Slice selector', options=[TIME_SLICE, RANGE_SLICE],
                                                        value=RANGE_SLICE,
                                                        inline=True)
@@ -210,84 +239,53 @@ class UIDesc:
         self.quiver_map = pn.bind(lambda range_index: self.get_quiver(range_index=range_index),
                                   range_index=self.range_slider)
 
-    def to_notebook(self):
-        self.controls = pn.Column(
-            #  trajectory_dmap,
-            pn.Row(
-                pn.WidgetBox("Frame selector",
-                             self.frame_slider,
-                             self.ptime_label, sizing_mode='stretch_width'
-                             ),
-                pn.WidgetBox("Range selector",
-                             self.range_slider,
-                             self.prange_label, sizing_mode='stretch_width'
-                             )
-            ),
-            pn.Row(
-                pn.WidgetBox("Select slice data on",
-                             self.slice_selector
-                             )
-            ),
-        )
-        self.maps = pn.Column(
-            pn.Row(
-            self.trajectory_dmap,
-            self.quiver_map,
-            sizing_mode='stretch_width'
-        )
-        )
+    def __load_file(self,file_name:str):
+        if self.file_name != file_name:
+            if not Path(file_name).is_file():
+                raise Exception(f"{file_name} does not exist or is not a file")
+            self.data = loader.read_data(file_name)
+            self.file_name = file_name
+            self.create_widgets()
 
-        self.graphs = pn.Column(
-            pn.Row(
-                self.dd_amp,
-                self.pamplitude_dmap,
-            ),
-            pn.Row(
-                self.dd_corr,
-                self.pcorrelation_dmap,
-            ),
+    def on_file_loader_changed(self):
+        """
+        Called when a file is loaded, could be called several times but will only be executed once.
+        It will recreated all widgets
+        """
 
-            pn.Row(
-                self.dd_dir,
-                self.pdirection_dmap,
-            ),
-            sizing_mode='stretch_width'
-        )
-        return self.controls, self.maps, self.graphs
+        #check if we need to reload data
+        file_path = self.file_selector.value
+        if len(file_path) ==0:
+            # self.file_name = None
+            return
+        if len(file_path) != 1:
+            self.file_name = None
+            raise Exception("Only one single file is supported")
 
-    def to_standalone(self):
-        bootstrap = pn.template.BootstrapTemplate(title='ADCP STA Data viewer')
+        file_name = file_path[0]
+        self.__load_file(file_name)
 
-        bootstrap.sidebar.append(
-            pn.Column(
-                #  trajectory_dmap,
-                pn.Row(
-                    pn.WidgetBox("Frame selector",
-                                 self.frame_slider,
-                                 self.ptime_label, sizing_mode='stretch_width'
-                                 ),
-                ),
-                pn.Row(
-                    pn.WidgetBox("Range selector",
-                                 self.range_slider,
-                                 self.prange_label, sizing_mode='stretch_width'
-                                 )
-                ),
-                pn.Row(
-                    pn.WidgetBox("Select slice data on",
-                                 self.slice_selector
-                                 )
-                ),
-            )
-        )
-        bootstrap.main.append(
-            pn.Column(
+    def __get_map_widget(self):
+        """Retrieve map widget, """
+        def update_widget():
+            self.on_file_loader_changed()
+            map_widget = pn.Column(
                 pn.Row(
                     self.trajectory_dmap,
                     self.quiver_map,
                     sizing_mode='stretch_width'
-                ),
+                )
+            )
+            return map_widget
 
+        maps = pn.bind(lambda select: update_widget(), select=self.file_selector)
+
+        return pn.Column(maps,sizing_mode='stretch_width')
+
+    def __get_graph_widget(self):
+        def update_widget():
+            self.on_file_loader_changed()
+            graphs = pn.Column(
                 pn.Row(
                     self.dd_amp,
                     self.pamplitude_dmap,
@@ -303,6 +301,121 @@ class UIDesc:
                 ),
                 sizing_mode='stretch_width'
             )
+            return graphs
+
+        graph_widget = pn.bind(lambda select: update_widget(), select=self.file_selector)
+        return pn.Column(graph_widget,sizing_mode='stretch_width')
+
+    def __get_control_widget(self):
+        def update_widget():
+            self.on_file_loader_changed()
+            control_widget = pn.Column(
+                #  trajectory_dmap,
+                pn.Row(
+                    pn.WidgetBox("Frame selector",
+                                 self.frame_slider,
+                                 self.ptime_label, sizing_mode='stretch_width'
+                                 ),
+                    pn.WidgetBox("Range selector",
+                                 self.range_slider,
+                                 self.prange_label, sizing_mode='stretch_width'
+                                 )
+                ),
+                pn.Row(
+                    pn.WidgetBox("Select slice data on",
+                                 self.slice_selector
+                                 )
+                ),
+            )
+            return control_widget
+
+        control_widget = pn.bind(lambda select: update_widget(), select=self.file_selector)
+        return pn.Column(control_widget,sizing_mode='stretch_width')
+
+    def to_notebook(self):
+        """Get the list of widget for display in a jupyter notebook
+         return controls, maps, graphs the list of widget control
+        """
+        self.controls = self.__get_control_widget()
+        self.maps= self.__get_map_widget()
+        self.graphs = self.__get_graph_widget()
+        return self.controls, self.maps, self.graphs
+
+    def to_standalone(self):
+        bootstrap = pn.template.BootstrapTemplate(title='ADCP STA Data viewer')
+
+        def update_sidebar():
+            self.on_file_loader_changed()
+            if self.file_name is None:
+                side_bar = pn.Column(
+                )
+            else:
+                side_bar=  pn.Column(
+                    #  trajectory_dmap,
+                    pn.Row(
+                        pn.WidgetBox("Frame selector",
+                                     self.frame_slider,
+                                     self.ptime_label, sizing_mode='stretch_width'
+                                     ),
+                    ),
+                    pn.Row(
+                        pn.WidgetBox("Range selector",
+                                     self.range_slider,
+                                     self.prange_label, sizing_mode='stretch_width'
+                                     )
+                    ),
+                    pn.Row(
+                        pn.WidgetBox("Select slice data on",
+                                     self.slice_selector
+                                     )
+                    ),sizing_mode='stretch_width'
+                )
+            return side_bar
+        sidebar_widgets = pn.bind(lambda select: update_sidebar(), select=self.file_selector)
+        def update_main():
+            self.on_file_loader_changed()
+            if self.file_name is None:
+                main_ = pn.Column(
+                    pn.Row(
+                            self.file_selector,
+                        ),
+                    sizing_mode='stretch_width'
+                )
+            else:
+                main_= pn.Column(
+                    pn.Row(
+                            self.file_selector,
+                    ),
+                    pn.Row(
+                        self.trajectory_dmap,
+                        self.quiver_map,
+                        sizing_mode='stretch_width'
+                    ),
+
+                    pn.Row(
+                        self.dd_amp,
+                        self.pamplitude_dmap,
+                    ),
+                    pn.Row(
+                        self.dd_corr,
+                        self.pcorrelation_dmap,
+                    ),
+
+                    pn.Row(
+                        self.dd_dir,
+                        self.pdirection_dmap,
+                    ),
+                    sizing_mode='stretch_width'
+                )
+            return main_
+        main_widgets = pn.bind(lambda select: update_main(), select=self.file_selector)
+
+        bootstrap.sidebar.append(
+            pn.Column(sidebar_widgets,sizing_mode='stretch_width')
+        )
+        bootstrap.main.append(
+            pn.Column(main_widgets,sizing_mode='stretch_width'),
+
         )
         bootstrap.servable()
         bootstrap.show()
