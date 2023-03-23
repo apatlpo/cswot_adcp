@@ -1,6 +1,7 @@
+from collections import namedtuple
 from ctypes import Array
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, NamedTuple
 
 import cartopy.crs as ccrs
 import holoviews as hv
@@ -14,7 +15,8 @@ import hvplot.xarray
 
 import cswot_adcp.maps as mp
 from cswot_adcp import data_loader as loader
-from cswot_adcp.data_loader import Names as names
+from cswot_adcp.xarray_model import Names as names
+
 
 # pn.extension('ipywidgets')
 
@@ -38,16 +40,31 @@ HEIGHT_MAP = 400
 RANGE_SLICE = names.range
 TIME_SLICE = names.time
 
+DisplayParameter = namedtuple("DisplayParameter",
+                              ["amplitude_min", "amplitude_max", "direction_min", "direction_max", "correlation_min",
+                               "correlation_max", "amplitude_cmap", "direction_cmap", "correlation_cmap"], defaults=[0,1,-180,180,0,1,"inferno","hsv","hot"])
+
+
+#
+# """Class for display parameter (color bar values)"""
+# def __init__(self):
+#     self.amplitude_min =0
+#     self.amplitude_max=1
+#     self.direction_min=-180
+#     self.direction_max=180
+#     self.correlation_min =0
+#     self.correlation_max=0
+#     self.amplitude_cmap="hot"
 
 class UIDesc:
-    def __init__(self, filename_list:Array[str]):
-        self.file_selector = None
+    def __init__(self, filename_list: Array[str], display_parameter=DisplayParameter()):
         self.file_name = None
+        self.display = display_parameter
         if len(filename_list) > 1:
             raise Exception("Only one single file is supported")
         self.range_selection = True  # indicate if we use a time based selection or range type
         self.create_loader_widget()
-        if len(filename_list)>0:
+        if len(filename_list) > 0:
             self.__load_file(file_name=filename_list[0])
 
     def declare_time_slider(self):
@@ -74,22 +91,24 @@ class UIDesc:
     def get_total_amplitude(self):
         """Return graph with magnitude on the whole file"""
         return (self.data[names.compensated_magnitude]
-                .hvplot(x=names.time, y=names.range, responsive=True, clim=(0, 1), height=HEIGHT, cmap="inferno")
+                .hvplot(x=names.time, y=names.range, responsive=True,
+                        clim=(self.display.amplitude_min, self.display.amplitude_max), height=HEIGHT, cmap=self.display.amplitude_cmap)
                 .opts(invert_yaxis=True, title="velocity magnitude")
                 )
 
     def get_total_dir(self):
         """return graph with direction on the whole file"""
         return (self.data[names.compensated_dir]
-                .hvplot(x=names.time, y=names.range, responsive=True, clim=(-180, 180), height=HEIGHT, cmap="hsv")
+                .hvplot(x=names.time, y=names.range, responsive=True,
+                        clim=(self.display.direction_min, self.display.direction_max), height=HEIGHT, cmap=self.display.direction_cmap)
                 .opts(invert_yaxis=True, title="velocity direction")
                 )
 
     def get_total_corr(self):
         """return graph with correlation on the whole file"""
-
         return (self.data[names.correlation].mean(names.beam_dimension)
-                .hvplot(x=names.time, y=names.range, responsive=True, clim=(0, 100), height=HEIGHT, cmap="hot", )
+                .hvplot(x=names.time, y=names.range, responsive=True,
+                        clim=(self.display.correlation_min, self.display.correlation_max), height=HEIGHT, cmap=self.display.correlation_cmap, )
                 .opts(invert_yaxis=True, title="correlation")
                 )
 
@@ -114,12 +133,14 @@ class UIDesc:
 
     def get_profile_amplitude(self, frame: int, range_index: int, slice: str = RANGE_SLICE):
         """return amplitude slice"""
-        return self.__get_data_slice(frame=frame, range_index=range_index, slice=slice, variable_name=names.compensated_magnitude,
+        return self.__get_data_slice(frame=frame, range_index=range_index, slice=slice,
+                                     variable_name=names.compensated_magnitude,
                                      title="velocity magnitude profile", ylim=(0, 1))
 
     def get_profile_direction(self, frame: int, range_index: int, slice: str = RANGE_SLICE):
         """return direction slice"""
-        return self.__get_data_slice(frame=frame, range_index=range_index, slice=slice, variable_name=names.compensated_dir,
+        return self.__get_data_slice(frame=frame, range_index=range_index, slice=slice,
+                                     variable_name=names.compensated_dir,
                                      title="velocity direction profile", ylim=(-180, 180))
 
     def get_profile_correlation(self, frame: int, range_index: int, slice: str = RANGE_SLICE):
@@ -140,7 +161,8 @@ class UIDesc:
                                  )
         selected = subset.isel(time=frame)
         pos_selected = pd.DataFrame(
-            data={names.elongitude_gps: [float(selected.elongitude_gps)], names.elatitude_gps: [float(selected.elatitude_gps)]})
+            data={names.elongitude_gps: [float(selected.elongitude_gps)],
+                  names.elatitude_gps: [float(selected.elatitude_gps)]})
         focus = pos_selected.hvplot.points(names.elongitude_gps, names.elatitude_gps, geo=True, color='red',
                                            alpha=1., height=HEIGHT_MAP)
         return base * focus
@@ -163,7 +185,8 @@ class UIDesc:
 
         ax.plot(x, y, color="b", transform=mp.crs)
         sampled = selected_range.isel(time=slice(0, None, 10))
-        x, y, u, v = sampled[names.elongitude_gps].values, sampled[names.elatitude_gps].values, sampled[names.compensated_E].values, \
+        x, y, u, v = sampled[names.elongitude_gps].values, sampled[names.elatitude_gps].values, sampled[
+            names.compensated_E].values, \
                      sampled[names.compensated_N].values
 
         q = ax.quiver(x=x, y=y, u=u, v=v, transform=mp.crs, pivot="tail", scale=2,
@@ -190,7 +213,7 @@ class UIDesc:
 
     def create_loader_widget(self):
         """create a widget for file loader"""
-        self.file_selector = pn.widgets.FileSelector(directory="..",file_pattern="*.sta",only_files=True)
+        self.file_selector = pn.widgets.FileSelector(directory="..", file_pattern="*.sta", only_files=True)
         return self.file_selector
 
     def create_widgets(self):
@@ -239,7 +262,7 @@ class UIDesc:
         self.quiver_map = pn.bind(lambda range_index: self.get_quiver(range_index=range_index),
                                   range_index=self.range_slider)
 
-    def __load_file(self,file_name:str):
+    def __load_file(self, file_name: str):
         if self.file_name != file_name:
             if not Path(file_name).is_file():
                 raise Exception(f"{file_name} does not exist or is not a file")
@@ -253,9 +276,9 @@ class UIDesc:
         It will recreated all widgets
         """
 
-        #check if we need to reload data
+        # check if we need to reload data
         file_path = self.file_selector.value
-        if len(file_path) ==0:
+        if len(file_path) == 0:
             # self.file_name = None
             return
         if len(file_path) != 1:
@@ -267,6 +290,7 @@ class UIDesc:
 
     def __get_map_widget(self):
         """Retrieve map widget, """
+
         def update_widget():
             self.on_file_loader_changed()
             map_widget = pn.Column(
@@ -280,7 +304,7 @@ class UIDesc:
 
         maps = pn.bind(lambda select: update_widget(), select=self.file_selector)
 
-        return pn.Column(maps,sizing_mode='stretch_width')
+        return pn.Column(maps, sizing_mode='stretch_width')
 
     def __get_graph_widget(self):
         def update_widget():
@@ -304,7 +328,7 @@ class UIDesc:
             return graphs
 
         graph_widget = pn.bind(lambda select: update_widget(), select=self.file_selector)
-        return pn.Column(graph_widget,sizing_mode='stretch_width')
+        return pn.Column(graph_widget, sizing_mode='stretch_width')
 
     def __get_control_widget(self):
         def update_widget():
@@ -330,14 +354,14 @@ class UIDesc:
             return control_widget
 
         control_widget = pn.bind(lambda select: update_widget(), select=self.file_selector)
-        return pn.Column(control_widget,sizing_mode='stretch_width')
+        return pn.Column(control_widget, sizing_mode='stretch_width')
 
     def to_notebook(self):
         """Get the list of widget for display in a jupyter notebook
          return controls, maps, graphs the list of widget control
         """
         self.controls = self.__get_control_widget()
-        self.maps= self.__get_map_widget()
+        self.maps = self.__get_map_widget()
         self.graphs = self.__get_graph_widget()
         return self.controls, self.maps, self.graphs
 
@@ -350,7 +374,7 @@ class UIDesc:
                 side_bar = pn.Column(
                 )
             else:
-                side_bar=  pn.Column(
+                side_bar = pn.Column(
                     #  trajectory_dmap,
                     pn.Row(
                         pn.WidgetBox("Frame selector",
@@ -368,23 +392,25 @@ class UIDesc:
                         pn.WidgetBox("Select slice data on",
                                      self.slice_selector
                                      )
-                    ),sizing_mode='stretch_width'
+                    ), sizing_mode='stretch_width'
                 )
             return side_bar
+
         sidebar_widgets = pn.bind(lambda select: update_sidebar(), select=self.file_selector)
+
         def update_main():
             self.on_file_loader_changed()
             if self.file_name is None:
                 main_ = pn.Column(
                     pn.Row(
-                            self.file_selector,
-                        ),
+                        self.file_selector,
+                    ),
                     sizing_mode='stretch_width'
                 )
             else:
-                main_= pn.Column(
+                main_ = pn.Column(
                     pn.Row(
-                            self.file_selector,
+                        self.file_selector,
                     ),
                     pn.Row(
                         self.trajectory_dmap,
@@ -408,13 +434,14 @@ class UIDesc:
                     sizing_mode='stretch_width'
                 )
             return main_
+
         main_widgets = pn.bind(lambda select: update_main(), select=self.file_selector)
 
         bootstrap.sidebar.append(
-            pn.Column(sidebar_widgets,sizing_mode='stretch_width')
+            pn.Column(sidebar_widgets, sizing_mode='stretch_width')
         )
         bootstrap.main.append(
-            pn.Column(main_widgets,sizing_mode='stretch_width'),
+            pn.Column(main_widgets, sizing_mode='stretch_width'),
 
         )
         bootstrap.servable()
