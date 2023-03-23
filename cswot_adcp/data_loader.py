@@ -5,6 +5,17 @@ import xarray as xr
 import cswot_adcp.adcp as ad
 
 
+class Names:
+    time="time"
+    compensated_dir = "compensated_Dir"
+    compensated_magnitude = "compensated_Mag"
+    correlation = "corr"
+    beam_dimension = "beam"
+    elatitude_gps="elatitude_gps"
+    elongitude_gps="elongitude_gps"
+    range = "range"
+    compensated_E = "compensated_E"
+    compensated_N = "compensated_N"
 
 def read_data(file):
     # STA file reading
@@ -28,9 +39,9 @@ def use_std_time(data:xr.Dataset):
 
 def round_time_values(data:xr.Dataset, round_value = "500ms"):
     """round time to values"""
-    data["time"] = data.time.dt.round(round_value)
+    data[Names.time] = data.time.dt.round(round_value)
     data = data.assign_coords(time_date=data.time)
-    data["time"] = (data.time - data.time[0]) / pd.Timedelta("1s")
+    data[Names.time] = (data.time - data.time[0]) / pd.Timedelta("1s")
     return data
 
 def update_datastructure(data:xr.Dataset):

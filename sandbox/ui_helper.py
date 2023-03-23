@@ -14,14 +14,14 @@ import hvplot.xarray
 
 import cswot_adcp.maps as mp
 from cswot_adcp import data_loader as loader
-
+from cswot_adcp.data_loader import Names as names
 
 # pn.extension('ipywidgets')
 
 
 def get_display_extent(STA, buffer=.01):
     """ compute horizontal extent of the STA, add a marging on bounding box for display purpose"""
-    lon, lat = STA["elongitude_gps"], STA["elatitude_gps"]
+    lon, lat = STA[names.elongitude_gps], STA[names.elatitude_gps]
     lon_scale = 1 / np.cos(np.pi / 180 * lat.mean())
     extent = [lon.min() - buffer * lon_scale,
               lon.max() + buffer * lon_scale,
@@ -35,8 +35,8 @@ def get_display_extent(STA, buffer=.01):
 HEIGHT = 200
 HEIGHT_MAP = 400
 
-RANGE_SLICE = "Range"
-TIME_SLICE = "Time"
+RANGE_SLICE = names.range
+TIME_SLICE = names.time
 
 
 class UIDesc:
@@ -73,23 +73,23 @@ class UIDesc:
 
     def get_total_amplitude(self):
         """Return graph with magnitude on the whole file"""
-        return (self.data["compensated_Mag"]
-                .hvplot(x="time", y="range", responsive=True, clim=(0, 1), height=HEIGHT, cmap="inferno")
+        return (self.data[names.compensated_magnitude]
+                .hvplot(x=names.time, y=names.range, responsive=True, clim=(0, 1), height=HEIGHT, cmap="inferno")
                 .opts(invert_yaxis=True, title="velocity magnitude")
                 )
 
     def get_total_dir(self):
         """return graph with direction on the whole file"""
-        return (self.data["compensated_Dir"]
-                .hvplot(x="time", y="range", responsive=True, clim=(-180, 180), height=HEIGHT, cmap="hsv")
+        return (self.data[names.compensated_dir]
+                .hvplot(x=names.time, y=names.range, responsive=True, clim=(-180, 180), height=HEIGHT, cmap="hsv")
                 .opts(invert_yaxis=True, title="velocity direction")
                 )
 
     def get_total_corr(self):
         """return graph with correlation on the whole file"""
 
-        return (self.data["corr"].mean("beam")
-                .hvplot(x="time", y="range", responsive=True, clim=(0, 100), height=HEIGHT, cmap="hot", )
+        return (self.data[names.correlation].mean(names.beam_dimension)
+                .hvplot(x=names.time, y=names.range, responsive=True, clim=(0, 100), height=HEIGHT, cmap="hot", )
                 .opts(invert_yaxis=True, title="correlation")
                 )
 
@@ -100,39 +100,39 @@ class UIDesc:
             selected_data = self.data[variable_name].isel(time=frame)
             if len(selected_data.shape) > 1:
                 # correlation data, we reduce selected data
-                selected_data = selected_data.mean("beam")
-            return selected_data.hvplot.line(y=variable_name, x="range", responsive=True, height=HEIGHT, ylim=ylim) \
+                selected_data = selected_data.mean(names.beam_dimension)
+            return selected_data.hvplot.line(y=variable_name, x=names.range, responsive=True, height=HEIGHT, ylim=ylim) \
                 .opts(invert_axes=True, invert_yaxis=True, title=title)
 
         else:
             selected_data = self.data[variable_name].isel(range=range_index)
             if len(selected_data.shape) > 1:
                 # correlation data, we reduce selected data
-                selected_data = selected_data.mean("beam")
-            return selected_data.hvplot.line(x="time", y=variable_name, responsive=True, height=HEIGHT, ylim=ylim) \
+                selected_data = selected_data.mean(names.beam_dimension)
+            return selected_data.hvplot.line(x=names.time, y=variable_name, responsive=True, height=HEIGHT, ylim=ylim) \
                        .opts(invert_axes=False, invert_yaxis=False, title=title) * self.get_vline(frame=frame)
 
     def get_profile_amplitude(self, frame: int, range_index: int, slice: str = RANGE_SLICE):
         """return amplitude slice"""
-        return self.__get_data_slice(frame=frame, range_index=range_index, slice=slice, variable_name="compensated_Mag",
+        return self.__get_data_slice(frame=frame, range_index=range_index, slice=slice, variable_name=names.compensated_magnitude,
                                      title="velocity magnitude profile", ylim=(0, 1))
 
     def get_profile_direction(self, frame: int, range_index: int, slice: str = RANGE_SLICE):
         """return direction slice"""
-        return self.__get_data_slice(frame=frame, range_index=range_index, slice=slice, variable_name="compensated_Dir",
+        return self.__get_data_slice(frame=frame, range_index=range_index, slice=slice, variable_name=names.compensated_dir,
                                      title="velocity direction profile", ylim=(-180, 180))
 
     def get_profile_correlation(self, frame: int, range_index: int, slice: str = RANGE_SLICE):
         """return correlation slice"""
-        return self.__get_data_slice(frame=frame, range_index=range_index, slice=slice, variable_name="corr",
+        return self.__get_data_slice(frame=frame, range_index=range_index, slice=slice, variable_name=names.correlation,
                                      title="correlation profile", ylim=(0, 200))
 
     def get_trajectory(self, frame):
         """get a interactive map for navigation display"""
-        subset = self.data[['elongitude_gps', 'elatitude_gps']]
+        subset = self.data[[names.elongitude_gps, names.elatitude_gps]]
         _df = subset.to_dataframe()
         extent = get_display_extent(self.data, buffer=0.1)
-        base = _df.hvplot.points('elongitude_gps', 'elatitude_gps', geo=True, color='gray', alpha=0.2,
+        base = _df.hvplot.points(names.elongitude_gps, names.elatitude_gps, geo=True, color='gray', alpha=0.2,
                                  xlim=(extent[0], extent[1]), ylim=(extent[2], extent[3]), tiles='EsriNatGeo',
                                  # width=500
                                  # width=500,
@@ -140,8 +140,8 @@ class UIDesc:
                                  )
         selected = subset.isel(time=frame)
         pos_selected = pd.DataFrame(
-            data={'elongitude_gps': [float(selected.elongitude_gps)], 'elatitude_gps': [float(selected.elatitude_gps)]})
-        focus = pos_selected.hvplot.points('elongitude_gps', 'elatitude_gps', geo=True, color='red',
+            data={names.elongitude_gps: [float(selected.elongitude_gps)], names.elatitude_gps: [float(selected.elatitude_gps)]})
+        focus = pos_selected.hvplot.points(names.elongitude_gps, names.elatitude_gps, geo=True, color='red',
                                            alpha=1., height=HEIGHT_MAP)
         return base * focus
 
@@ -159,12 +159,12 @@ class UIDesc:
             central_latitude=_lat_central,
         )
         ax = fig.add_subplot(111, projection=proj)
-        x, y = selected_range["elongitude_gps"].values, selected_range["elatitude_gps"].values
+        x, y = selected_range[names.elongitude_gps].values, selected_range[names.elatitude_gps].values
 
         ax.plot(x, y, color="b", transform=mp.crs)
         sampled = selected_range.isel(time=slice(0, None, 10))
-        x, y, u, v = sampled["elongitude_gps"].values, sampled["elatitude_gps"].values, sampled["compensated_E"].values, \
-                     sampled["compensated_N"].values
+        x, y, u, v = sampled[names.elongitude_gps].values, sampled[names.elatitude_gps].values, sampled[names.compensated_E].values, \
+                     sampled[names.compensated_N].values
 
         q = ax.quiver(x=x, y=y, u=u, v=v, transform=mp.crs, pivot="tail", scale=2,
                       # width=1e-2,
