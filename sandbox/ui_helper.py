@@ -42,7 +42,8 @@ TIME_SLICE = names.time
 
 DisplayParameter = namedtuple("DisplayParameter",
                               ["amplitude_min", "amplitude_max", "direction_min", "direction_max", "correlation_min",
-                               "correlation_max", "amplitude_cmap", "direction_cmap", "correlation_cmap"], defaults=[0,1,-180,180,0,1,"inferno","hsv","hot"])
+                               "correlation_max", "amplitude_cmap", "direction_cmap", "correlation_cmap"],
+                              defaults=[0, 1, -180, 180, 0, 100, "inferno", "hsv", "hot"])
 
 
 #
@@ -60,12 +61,10 @@ class UIDesc:
     def __init__(self, filename_list: Array[str], display_parameter=DisplayParameter()):
         self.file_name = None
         self.display = display_parameter
-        if len(filename_list) > 1:
+        if len(filename_list) != 1:
             raise Exception("Only one single file is supported")
+        self.__load_file(file_name=filename_list[0])
         self.range_selection = True  # indicate if we use a time based selection or range type
-        self.create_loader_widget()
-        if len(filename_list) > 0:
-            self.__load_file(file_name=filename_list[0])
 
     def declare_time_slider(self):
         self.frame_slider = pn.widgets.IntSlider(name='Frame Index', start=0, end=self.data.time.shape[0] - 1, value=0)
@@ -92,7 +91,8 @@ class UIDesc:
         """Return graph with magnitude on the whole file"""
         return (self.data[names.compensated_magnitude]
                 .hvplot(x=names.time, y=names.range, responsive=True,
-                        clim=(self.display.amplitude_min, self.display.amplitude_max), height=HEIGHT, cmap=self.display.amplitude_cmap)
+                        clim=(self.display.amplitude_min, self.display.amplitude_max), height=HEIGHT,
+                        cmap=self.display.amplitude_cmap)
                 .opts(invert_yaxis=True, title="velocity magnitude")
                 )
 
@@ -100,7 +100,8 @@ class UIDesc:
         """return graph with direction on the whole file"""
         return (self.data[names.compensated_dir]
                 .hvplot(x=names.time, y=names.range, responsive=True,
-                        clim=(self.display.direction_min, self.display.direction_max), height=HEIGHT, cmap=self.display.direction_cmap)
+                        clim=(self.display.direction_min, self.display.direction_max), height=HEIGHT,
+                        cmap=self.display.direction_cmap)
                 .opts(invert_yaxis=True, title="velocity direction")
                 )
 
@@ -108,7 +109,8 @@ class UIDesc:
         """return graph with correlation on the whole file"""
         return (self.data[names.correlation].mean(names.beam_dimension)
                 .hvplot(x=names.time, y=names.range, responsive=True,
-                        clim=(self.display.correlation_min, self.display.correlation_max), height=HEIGHT, cmap=self.display.correlation_cmap, )
+                        clim=(self.display.correlation_min, self.display.correlation_max), height=HEIGHT,
+                        cmap=self.display.correlation_cmap, )
                 .opts(invert_yaxis=True, title="correlation")
                 )
 
@@ -211,14 +213,8 @@ class UIDesc:
         range = self.data.range[range_index].values
         return hv.HLine(range).opts(color="red")
 
-    def create_loader_widget(self):
-        """create a widget for file loader"""
-        self.file_selector = pn.widgets.FileSelector(directory="..", file_pattern="*.sta", only_files=True)
-        return self.file_selector
-
     def create_widgets(self):
         """Create all widgets"""
-        print("create widgets")
         self.declare_time_slider()
         self.declare_range_slider()
         self.slice_selector = pn.widgets.RadioBoxGroup(name='Slice selector', options=[TIME_SLICE, RANGE_SLICE],
@@ -270,91 +266,55 @@ class UIDesc:
             self.file_name = file_name
             self.create_widgets()
 
-    def on_file_loader_changed(self):
-        """
-        Called when a file is loaded, could be called several times but will only be executed once.
-        It will recreated all widgets
-        """
-
-        # check if we need to reload data
-        file_path = self.file_selector.value
-        if len(file_path) == 0:
-            # self.file_name = None
-            return
-        if len(file_path) != 1:
-            self.file_name = None
-            raise Exception("Only one single file is supported")
-
-        file_name = file_path[0]
-        self.__load_file(file_name)
-
     def __get_map_widget(self):
         """Retrieve map widget, """
-
-        def update_widget():
-            self.on_file_loader_changed()
-            map_widget = pn.Column(
-                pn.Row(
-                    self.trajectory_dmap,
-                    self.quiver_map,
-                    sizing_mode='stretch_width'
-                )
-            )
-            return map_widget
-
-        maps = pn.bind(lambda select: update_widget(), select=self.file_selector)
-
-        return pn.Column(maps, sizing_mode='stretch_width')
+        return pn.Column(pn.Row(
+            self.trajectory_dmap,
+            self.quiver_map,
+            sizing_mode='stretch_width'
+        ), sizing_mode='stretch_width')
 
     def __get_graph_widget(self):
-        def update_widget():
-            self.on_file_loader_changed()
-            graphs = pn.Column(
-                pn.Row(
-                    self.dd_amp,
-                    self.pamplitude_dmap,
-                ),
-                pn.Row(
-                    self.dd_corr,
-                    self.pcorrelation_dmap,
-                ),
 
-                pn.Row(
-                    self.dd_dir,
-                    self.pdirection_dmap,
-                ),
-                sizing_mode='stretch_width'
-            )
-            return graphs
+        graphs = pn.Column(
+            pn.Row(
+                self.dd_amp,
+                self.pamplitude_dmap,
+            ),
+            pn.Row(
+                self.dd_corr,
+                self.pcorrelation_dmap,
+            ),
 
-        graph_widget = pn.bind(lambda select: update_widget(), select=self.file_selector)
-        return pn.Column(graph_widget, sizing_mode='stretch_width')
+            pn.Row(
+                self.dd_dir,
+                self.pdirection_dmap,
+            ),
+            sizing_mode='stretch_width'
+        )
+        return graphs
 
     def __get_control_widget(self):
-        def update_widget():
-            self.on_file_loader_changed()
-            control_widget = pn.Column(
-                #  trajectory_dmap,
-                pn.Row(
-                    pn.WidgetBox("Frame selector",
-                                 self.frame_slider,
-                                 self.ptime_label, sizing_mode='stretch_width'
-                                 ),
-                    pn.WidgetBox("Range selector",
-                                 self.range_slider,
-                                 self.prange_label, sizing_mode='stretch_width'
-                                 )
-                ),
-                pn.Row(
-                    pn.WidgetBox("Select slice data on",
-                                 self.slice_selector
-                                 )
-                ),
-            )
-            return control_widget
+        control_widget = pn.Column(
+            #  trajectory_dmap,
+            pn.Row(
+                pn.WidgetBox("Frame selector",
+                             self.frame_slider,
+                             self.ptime_label, sizing_mode='stretch_width'
+                             ),
+                pn.WidgetBox("Range selector",
+                             self.range_slider,
+                             self.prange_label, sizing_mode='stretch_width'
+                             )
+            ),
+            pn.Row(
+                pn.WidgetBox("Select slice data on",
+                             self.slice_selector
+                             )
+            ),
+        )
 
-        control_widget = pn.bind(lambda select: update_widget(), select=self.file_selector)
-        return pn.Column(control_widget, sizing_mode='stretch_width')
+        return control_widget
 
     def to_notebook(self):
         """Get the list of widget for display in a jupyter notebook
@@ -368,77 +328,53 @@ class UIDesc:
     def to_standalone(self):
         bootstrap = pn.template.BootstrapTemplate(title='ADCP STA Data viewer')
 
-        def update_sidebar():
-            self.on_file_loader_changed()
-            if self.file_name is None:
-                side_bar = pn.Column(
-                )
-            else:
-                side_bar = pn.Column(
-                    #  trajectory_dmap,
-                    pn.Row(
-                        pn.WidgetBox("Frame selector",
-                                     self.frame_slider,
-                                     self.ptime_label, sizing_mode='stretch_width'
-                                     ),
-                    ),
-                    pn.Row(
-                        pn.WidgetBox("Range selector",
-                                     self.range_slider,
-                                     self.prange_label, sizing_mode='stretch_width'
-                                     )
-                    ),
-                    pn.Row(
-                        pn.WidgetBox("Select slice data on",
-                                     self.slice_selector
-                                     )
-                    ), sizing_mode='stretch_width'
-                )
-            return side_bar
+        side_bar = pn.Column(
+            #  trajectory_dmap,
+            pn.Row(
+                pn.WidgetBox("Frame selector",
+                             self.frame_slider,
+                             self.ptime_label, sizing_mode='stretch_width'
+                             ),
+            ),
+            pn.Row(
+                pn.WidgetBox("Range selector",
+                             self.range_slider,
+                             self.prange_label, sizing_mode='stretch_width'
+                             )
+            ),
+            pn.Row(
+                pn.WidgetBox("Select slice data on",
+                             self.slice_selector
+                             )
+            ), sizing_mode='stretch_width'
+        )
 
-        sidebar_widgets = pn.bind(lambda select: update_sidebar(), select=self.file_selector)
+        main_widgets = pn.Column(
 
-        def update_main():
-            self.on_file_loader_changed()
-            if self.file_name is None:
-                main_ = pn.Column(
-                    pn.Row(
-                        self.file_selector,
-                    ),
-                    sizing_mode='stretch_width'
-                )
-            else:
-                main_ = pn.Column(
-                    pn.Row(
-                        self.file_selector,
-                    ),
-                    pn.Row(
-                        self.trajectory_dmap,
-                        self.quiver_map,
-                        sizing_mode='stretch_width'
-                    ),
+            pn.Row(
+                self.trajectory_dmap,
+                self.quiver_map,
+                sizing_mode='stretch_width'
+            ),
 
-                    pn.Row(
-                        self.dd_amp,
-                        self.pamplitude_dmap,
-                    ),
-                    pn.Row(
-                        self.dd_corr,
-                        self.pcorrelation_dmap,
-                    ),
+            pn.Row(
+                self.dd_amp,
+                self.pamplitude_dmap,
+            ),
+            pn.Row(
+                self.dd_corr,
+                self.pcorrelation_dmap,
+            ),
 
-                    pn.Row(
-                        self.dd_dir,
-                        self.pdirection_dmap,
-                    ),
-                    sizing_mode='stretch_width'
-                )
-            return main_
-
-        main_widgets = pn.bind(lambda select: update_main(), select=self.file_selector)
+            pn.Row(
+                self.dd_dir,
+                self.pdirection_dmap,
+            ),
+            sizing_mode='stretch_width'
+        )
 
         bootstrap.sidebar.append(
-            pn.Column(sidebar_widgets, sizing_mode='stretch_width')
+            pn.Column(side_bar, sizing_mode='stretch_width')
         )
         bootstrap.main.append(
             pn.Column(main_widgets, sizing_mode='stretch_width'),
