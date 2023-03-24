@@ -13,17 +13,18 @@ import panel as pn
 import xarray as xr
 import hvplot.pandas
 import hvplot.xarray
+from bokeh.resources import INLINE
 
 import cswot_adcp.maps as mp
 from cswot_adcp import data_loader as loader
 from cswot_adcp.xarray_model import Names as names
 
-
+pn.extension()
 # pn.extension('ipywidgets')
 
 
 def get_display_extent(STA, buffer=.01):
-    """ compute horizontal extent of the STA, add a marging on bounding box for display purpose"""
+    """ compute horizontal extent of the STA, add a marging on bounding box for parameters purpose"""
     lon, lat = STA[names.elongitude_gps], STA[names.elatitude_gps]
     lon_scale = 1 / np.cos(np.pi / 180 * lat.mean())
     extent = [lon.min() - buffer * lon_scale,
@@ -43,13 +44,13 @@ TIME_SLICE = names.time
 
 DisplayParameter = namedtuple("DisplayParameter",
                               ["amplitude_min", "amplitude_max", "direction_min", "direction_max", "correlation_min",
-                               "correlation_max", "amplitude_cmap", "direction_cmap", "correlation_cmap"],
-                              defaults=[0, 1, -180, 180, 0, 100, "inferno", "hsv", "hot"])
+                               "correlation_max", "amplitude_cmap", "direction_cmap", "correlation_cmap","screenshot_dir"],
+                              defaults=[0, 1, -180, 180, 0, 100, "inferno", "hsv", "hot","./screenshot"])
 
 class UIDesc:
     def __init__(self, filename_list: Array[str], display_parameter=DisplayParameter()):
         self.file_name = None
-        self.display = display_parameter
+        self.parameters = display_parameter
         if len(filename_list) != 1:
             raise Exception("Only one single file is supported")
         self.__load_file(file_name=filename_list[0])
@@ -80,8 +81,8 @@ class UIDesc:
         """Return graph with magnitude on the whole file"""
         return (self.data[names.compensated_magnitude]
                 .hvplot(x=names.time, y=names.range, responsive=True,
-                        clim=(self.display.amplitude_min, self.display.amplitude_max), height=HEIGHT,
-                        cmap=self.display.amplitude_cmap)
+                        clim=(self.parameters.amplitude_min, self.parameters.amplitude_max), height=HEIGHT,
+                        cmap=self.parameters.amplitude_cmap)
                 .opts(invert_yaxis=True, title="velocity magnitude")
                 )
 
@@ -89,8 +90,8 @@ class UIDesc:
         """return graph with direction on the whole file"""
         return (self.data[names.compensated_dir]
                 .hvplot(x=names.time, y=names.range, responsive=True,
-                        clim=(self.display.direction_min, self.display.direction_max), height=HEIGHT,
-                        cmap=self.display.direction_cmap)
+                        clim=(self.parameters.direction_min, self.parameters.direction_max), height=HEIGHT,
+                        cmap=self.parameters.direction_cmap)
                 .opts(invert_yaxis=True, title="velocity direction")
                 )
 
@@ -98,8 +99,8 @@ class UIDesc:
         """return graph with correlation on the whole file"""
         return (self.data[names.correlation].mean(names.beam_dimension)
                 .hvplot(x=names.time, y=names.range, responsive=True,
-                        clim=(self.display.correlation_min, self.display.correlation_max), height=HEIGHT,
-                        cmap=self.display.correlation_cmap, )
+                        clim=(self.parameters.correlation_min, self.parameters.correlation_max), height=HEIGHT,
+                        cmap=self.parameters.correlation_cmap, )
                 .opts(invert_yaxis=True, title="correlation")
                 )
 
@@ -140,7 +141,7 @@ class UIDesc:
                                      title="correlation profile", ylim=(0, 200))
 
     def get_trajectory(self, frame):
-        """get a interactive map for navigation display"""
+        """get a interactive map for navigation parameters"""
         subset = self.data[[names.elongitude_gps, names.elatitude_gps]]
         _df = subset.to_dataframe()
         extent = get_display_extent(self.data, buffer=0.1)
@@ -344,7 +345,7 @@ class UIDesc:
         return control_widget
 
     def to_notebook(self):
-        """Get the list of widget for display in a jupyter notebook
+        """Get the list of widget for parameters in a jupyter notebook
          return controls, maps, graphs the list of widget control
         """
         self.controls = self.__get_control_widget()
@@ -352,11 +353,41 @@ class UIDesc:
         self.graphs = self.__get_graph_widget()
         return self.controls, self.maps, self.graphs
 
+    def create_save_widget(self,component):
+        save_button = pn.widgets.Button(name='Save to', button_type='primary')
+        label = pn.widgets.StaticText(name='saved to',value="")
+        label.visible=False
+
+
+        def get_file_name(index,screenshot_path) -> Path:
+            file_name = Path(self.file_name).stem + f"_{index}.html"
+            full_path = Path(screenshot_path) / file_name
+            return Path(full_path)
+
+        def save(event):
+            #compute name :
+            screenshot_path = self.parameters.screenshot_dir
+            #try to find an available file name
+            index = save_button.clicks
+            output_file = get_file_name(index,screenshot_path)
+            while  output_file.exists():
+                index +=1
+                output_file = get_file_name(index,screenshot_path)
+            pn.io.save.save(component,filename=output_file)
+            label.visible = True
+            label.value = output_file
+        save_button.on_click(save)
+        return pn.WidgetBox("Screenshots",
+            save_button,
+            label
+        )
+
     def to_standalone(self):
         bootstrap = pn.template.BootstrapTemplate(title='ADCP STA Data viewer')
 
+
         side_bar = pn.Column(
-            #  trajectory_dmap,
+
             pn.Row(
                 pn.WidgetBox("Frame selector",
                              self.frame_slider,
@@ -373,7 +404,11 @@ class UIDesc:
                 pn.WidgetBox("Select slice data on",
                              self.slice_selector
                              )
-            ), sizing_mode='stretch_width'
+            ),
+            pn.Row(
+                self.create_save_widget(bootstrap)
+            )
+            , sizing_mode='stretch_width'
         )
 
         main_widgets = pn.Column(
@@ -414,3 +449,4 @@ class UIDesc:
         )
         bootstrap.servable()
         bootstrap.show()
+
