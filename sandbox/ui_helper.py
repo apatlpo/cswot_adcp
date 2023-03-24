@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Tuple, NamedTuple
 
 import cartopy.crs as ccrs
+import cartopy.feature
 import holoviews as hv
 import matplotlib.pyplot as plt
 import numpy as np
@@ -173,32 +174,49 @@ class UIDesc:
         """return vectorial map (quiver) dfor a given range"""
         selected_range = self.data.isel(range=range_index)
         fig = plt.figure(figsize=(10, 10))
-        extent = get_display_extent(self.data, buffer=.01)
+        extent = get_display_extent(self.data, buffer=.1)
         _lon_central = (extent[0] + extent[1]) * 0.5
         _lat_central = (extent[2] + extent[3]) * 0.5
-        aspect = (extent[1] - extent[0]) / (extent[3] - extent[2])
+        #aspect = (extent[1] - extent[0]) / (extent[3] - extent[2])
         # used to be ccrs.Orthographic(...)
         proj = ccrs.LambertAzimuthalEqualArea(
             central_longitude=_lon_central,
             central_latitude=_lat_central,
         )
         ax = fig.add_subplot(111, projection=proj)
-        x, y = selected_range[names.elongitude_gps].values, selected_range[names.elatitude_gps].values
 
+        #remove if not needed
+        ax.stock_img() # water background (often only blue color)
+        ax.coastlines() #coastline, only if near coast
+
+        #add grid lines
+        gl = ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=True,
+                          linewidth=2, color='gray', alpha=0.5, linestyle='--')
+
+        #add navigation
+        x, y = selected_range[names.elongitude_gps].values, selected_range[names.elatitude_gps].values
         ax.plot(x, y, color="b", transform=mp.crs)
         sampled = selected_range.isel(time=slice(0, None, 10))
         x, y, u, v = sampled[names.elongitude_gps].values, sampled[names.elatitude_gps].values, sampled[
             names.compensated_E].values, \
                      sampled[names.compensated_N].values
 
+        #add quiver speed vectors
         q = ax.quiver(x=x, y=y, u=u, v=v, transform=mp.crs, pivot="tail", scale=2,
                       # width=1e-2,
                       )
+
+        #add quiver key
         uref = 0.5
         ax.quiverkey(q, 0.3, 0.1, uref, f'{uref} m/s', transform=mp.crs, color="blue", labelcolor="blue",
                      labelpos='N', coordinates='axes')
-        mpl_pane = pn.pane.Matplotlib(fig, tight=True, interactive=False, dpi=255, width=int(aspect * HEIGHT_MAP),
-                                      height=HEIGHT_MAP)
+
+        #set map extent
+        ax.set_extent(extents=tuple(extent))
+        mpl_pane = pn.pane.Matplotlib(fig, tight=True, interactive=False,
+                                      #width=int(aspect * HEIGHT_MAP),
+                                      height=HEIGHT_MAP,
+                                      )
         return mpl_pane
 
     def get_vline(self, frame):
@@ -275,7 +293,6 @@ class UIDesc:
         ), sizing_mode='stretch_width')
 
     def __get_graph_widget(self):
-
         graphs = pn.Column(
             pn.Row(
                 self.dd_amp,
