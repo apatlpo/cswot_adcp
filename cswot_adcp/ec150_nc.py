@@ -59,6 +59,7 @@ def read_ec150(file):
             Names.correlation: (["range","time", "beam"],correlations),
             Names.elatitude_gps: (["time" ], da_mean.mean_platform_latitude.data),
             Names.elongitude_gps: (["time"], da_mean.mean_platform_longitude.data),
+            Names.ship_heading: (["time"], np.zeros(da_mean.mean_platform_longitude.data.shape)),
         },
         coords={
 

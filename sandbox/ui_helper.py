@@ -46,18 +46,6 @@ DisplayParameter = namedtuple("DisplayParameter",
                                "correlation_max", "amplitude_cmap", "direction_cmap", "correlation_cmap"],
                               defaults=[0, 1, -180, 180, 0, 100, "inferno", "hsv", "hot"])
 
-
-#
-# """Class for display parameter (color bar values)"""
-# def __init__(self):
-#     self.amplitude_min =0
-#     self.amplitude_max=1
-#     self.direction_min=-180
-#     self.direction_max=180
-#     self.correlation_min =0
-#     self.correlation_max=0
-#     self.amplitude_cmap="hot"
-
 class UIDesc:
     def __init__(self, filename_list: Array[str], display_parameter=DisplayParameter()):
         self.file_name = None
@@ -231,6 +219,18 @@ class UIDesc:
         range = self.data.range[range_index].values
         return hv.HLine(range).opts(color="red")
 
+
+    ######## CODE TO MODIFY TO CREATE A NEW GRAPHIC
+    def get_basic_time_graph(self):
+        """return a basic graph aimed to be modified if need be, by default will be the ship heading displayed  """
+        #CREATE A 1D graphic depending on time based axis
+        return (self.data[names.ship_heading]
+                .hvplot(x=names.time, responsive=True,
+                        height=HEIGHT)
+                .opts(invert_yaxis=True, title="ship heading (deg)")
+                )
+
+
     def create_widgets(self):
         """Create all widgets"""
         self.declare_time_slider()
@@ -276,6 +276,11 @@ class UIDesc:
         self.quiver_map = pn.bind(lambda range_index: self.get_quiver(range_index=range_index),
                                   range_index=self.range_slider)
 
+        ######## CODE TO MODIFY TO CREATE A NEW GRAPHIC
+        #add basic graph : make it react on time slider and add time bar on it
+        self.basic_time_plot =  pn.bind(lambda frame: self.get_basic_time_graph() * self.get_vline(frame),
+                                  frame=self.frame_slider)
+
     def __load_file(self, file_name: str):
         if self.file_name != file_name:
             if not Path(file_name).is_file():
@@ -306,6 +311,11 @@ class UIDesc:
             pn.Row(
                 self.dd_dir,
                 self.pdirection_dmap,
+            ),
+            ######## CODE TO MODIFY TO CREATE A NEW GRAPHIC
+            #add the plot below
+            pn.Row(
+                self.basic_time_plot
             ),
             sizing_mode='stretch_width'
         )
@@ -386,6 +396,11 @@ class UIDesc:
             pn.Row(
                 self.dd_dir,
                 self.pdirection_dmap,
+            ),
+            ######## CODE TO MODIFY TO CREATE A NEW GRAPHIC
+            # add the plot below
+            pn.Row(
+                self.basic_time_plot
             ),
             sizing_mode='stretch_width'
         )

@@ -11,3 +11,4 @@ class Names:
     elongitude_gps = "elongitude_gps"
     compensated_E = "compensated_E"
     compensated_N = "compensated_N"
+    ship_heading = "heading"
