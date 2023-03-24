@@ -44,8 +44,8 @@ TIME_SLICE = names.time
 
 DisplayParameter = namedtuple("DisplayParameter",
                               ["amplitude_min", "amplitude_max", "direction_min", "direction_max", "correlation_min",
-                               "correlation_max", "amplitude_cmap", "direction_cmap", "correlation_cmap","screenshot_dir"],
-                              defaults=[0, 1, -180, 180, 0, 100, "inferno", "hsv", "hot","./screenshot"])
+                               "correlation_max", "amplitude_cmap", "direction_cmap", "correlation_cmap","screenshot_dir", "map_expansion"],
+                              defaults=[0, 1, -180, 180, 0, 100, "inferno", "hsv", "hot","./screenshot",0.1])
 
 class UIDesc:
     def __init__(self, filename_list: Array[str], display_parameter=DisplayParameter()):
@@ -127,24 +127,24 @@ class UIDesc:
         """return amplitude slice"""
         return self.__get_data_slice(frame=frame, range_index=range_index, slice=slice,
                                      variable_name=names.compensated_magnitude,
-                                     title="velocity magnitude profile", ylim=(0, 1))
+                                     title="velocity magnitude profile", ylim=(self.parameters.amplitude_min, self.parameters.amplitude_max))
 
     def get_profile_direction(self, frame: int, range_index: int, slice: str = RANGE_SLICE):
         """return direction slice"""
         return self.__get_data_slice(frame=frame, range_index=range_index, slice=slice,
                                      variable_name=names.compensated_dir,
-                                     title="velocity direction profile", ylim=(-180, 180))
+                                     title="velocity direction profile", ylim=(self.parameters.direction_min, self.parameters.direction_max))
 
     def get_profile_correlation(self, frame: int, range_index: int, slice: str = RANGE_SLICE):
         """return correlation slice"""
         return self.__get_data_slice(frame=frame, range_index=range_index, slice=slice, variable_name=names.correlation,
-                                     title="correlation profile", ylim=(0, 200))
+                                     title="correlation profile", ylim=(self.parameters.correlation_min, self.parameters.correlation_max))
 
     def get_trajectory(self, frame):
         """get a interactive map for navigation parameters"""
         subset = self.data[[names.elongitude_gps, names.elatitude_gps]]
         _df = subset.to_dataframe()
-        extent = get_display_extent(self.data, buffer=0.1)
+        extent = get_display_extent(self.data, buffer=self.parameters.map_expansion)
         base = _df.hvplot.points(names.elongitude_gps, names.elatitude_gps, geo=True, color='gray', alpha=0.2,
                                  xlim=(extent[0], extent[1]), ylim=(extent[2], extent[3]), tiles='EsriNatGeo',
                                  # width=500
@@ -163,7 +163,7 @@ class UIDesc:
         """return vectorial map (quiver) dfor a given range"""
         selected_range = self.data.isel(range=range_index)
         fig = plt.figure(figsize=(10, 10))
-        extent = get_display_extent(self.data, buffer=.1)
+        extent = get_display_extent(self.data, buffer=self.parameters.map_expansion)
         _lon_central = (extent[0] + extent[1]) * 0.5
         _lat_central = (extent[2] + extent[3]) * 0.5
         #aspect = (extent[1] - extent[0]) / (extent[3] - extent[2])
