@@ -49,15 +49,18 @@ DisplayParameter = namedtuple("DisplayParameter",
 
 class UIDesc:
     def __init__(self, filename_list: Array[str], display_parameter=DisplayParameter()):
-        self.file_name = None
+        self.file_names = []
         self.parameters = display_parameter
-        if len(filename_list) != 1:
-            raise Exception("Only one single file is supported")
-        self.__load_file(file_name=filename_list[0])
+        self.__load_files(filename_list)
+        #self.get_bounds()
+        self.create_widgets()
         self.range_selection = True  # indicate if we use a time based selection or range type
 
     def declare_time_slider(self):
-        self.frame_slider = pn.widgets.IntSlider(name='Frame Index', start=0, end=self.data.time.shape[0] - 1, value=0)
+        self.frame_slider = pn.widgets.IntSlider(name='Frame Index', start=0, 
+                                                 #end=self.data.time.shape[0] - 1, 
+                                                 end=self.data.time.shape[0] - 1, 
+                                                 value=0)
 
     def declare_range_slider(self):
         self.range_slider = pn.widgets.IntSlider(name='Range Index', start=0, end=self.data.range.shape[0] - 1, value=0)
@@ -185,7 +188,7 @@ class UIDesc:
         #add navigation
         x, y = selected_range[names.elongitude_gps].values, selected_range[names.elatitude_gps].values
         ax.plot(x, y, color="b", transform=mp.crs)
-        sampled = selected_range.isel(time=slice(0, None, 10))
+        sampled = selected_range.isel(time=slice(0, None, 2)) # should be a parameter
         x, y, u, v = sampled[names.elongitude_gps].values, sampled[names.elatitude_gps].values, sampled[
             names.compensated_E].values, \
                      sampled[names.compensated_N].values
@@ -282,13 +285,29 @@ class UIDesc:
         self.basic_time_plot =  pn.bind(lambda frame: self.get_basic_time_graph() * self.get_vline(frame),
                                   frame=self.frame_slider)
 
+    def __load_files(self, file_names: list):
+        dataset = [self.__load_file(file) for file in file_names]
+        #self.data = xr.concat(dataset, "time") # not a valid approach if data is heteregenous
+        self.data = dataset
+        self.file_names = file_names
+
     def __load_file(self, file_name: str):
-        if self.file_name != file_name:
+        if file_name not in self.file_names:
             if not Path(file_name).is_file():
                 raise Exception(f"{file_name} does not exist or is not a file")
-            self.data = loader.read_data(file_name)
-            self.file_name = file_name
-            self.create_widgets()
+            return loader.read_data(file_name)
+        
+    def get_bounds(self):
+        D = []
+        time_index_global = 0
+        for i, ds in enumerate(self.data):
+            D.append(dict(time_start=ds.time.values[0], time_end=ds.time.values[-1],
+                          time_index_start=time_index_global, time_index_end=time_index_global+ds.time.size,
+                          depth_start=float(ds.range[0]), depth_end=float(ds.range[-1]),
+                          )
+            )
+            time_index_global += ds.time.size
+        self.bounds = pd.DataFrame(D)
 
     def __get_map_widget(self):
         """Retrieve map widget, """
@@ -360,7 +379,10 @@ class UIDesc:
 
 
         def get_file_name(index,screenshot_path) -> Path:
-            file_name = Path(self.file_name).stem + f"_{index}.html"
+            if len(self.file_names)==1:
+                file_name = Path(self.file_names[0]).stem + f"_{index}.html"
+            else:
+                file_name = Path(self.file_names[0]).stem + "_" + Path(self.file_names[-1]).stem + f"_{index}.html"
             full_path = Path(screenshot_path) / file_name
             return Path(full_path)
 
