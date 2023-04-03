@@ -287,8 +287,8 @@ class UIDesc:
 
     def __load_files(self, file_names: list):
         dataset = [self.__load_file(file) for file in file_names]
-        #self.data = xr.concat(dataset, "time") # not a valid approach if data is heteregenous
-        self.data = dataset
+        self.data = xr.concat(dataset, "time") # not a valid approach if data is heteregenous
+        #self.data = dataset
         self.file_names = file_names
 
     def __load_file(self, file_name: str):

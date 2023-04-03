@@ -29,7 +29,8 @@ file_names = sorted(glob(file_name))
 extract_id = lambda f: int(f.split("-")[-1].split("_")[0])
 
 #file_names = [f for f in file_names if extract_id(f)>377 and extract_id(f)<380]
-print(file_names)
+#file_names = [f for f in file_names if extract_id(f)>380]
+#print(file_names)
 
 options = ui.DisplayParameter(**dict_values)
 # file_name = "ADCP_DriX__20220922T202647_018_000000.STA"
