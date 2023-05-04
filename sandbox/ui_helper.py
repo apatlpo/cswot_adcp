@@ -185,7 +185,7 @@ class UIDesc:
         #add navigation
         x, y = selected_range[names.elongitude_gps].values, selected_range[names.elatitude_gps].values
         ax.plot(x, y, color="b", transform=mp.crs)
-        sampled = selected_range.isel(time=slice(0, None, 10))
+        sampled = selected_range.isel(time=slice(0, None, 4))
         x, y, u, v = sampled[names.elongitude_gps].values, sampled[names.elatitude_gps].values, sampled[
             names.compensated_E].values, \
                      sampled[names.compensated_N].values

@@ -1,21 +1,30 @@
-name: pynsitu
+name: cswot
+
 channels:
   - pyviz
   - conda-forge
   - defaults
+
 dependencies:
-  - jupyterlab
-  - xarray
-  - zarr
-  - netcdf4
-  - geopandas
-  - hvplot
+  - python=3.10
+  - bokeh=2.4.3
+  - cartopy=0.21.1
+  - cmocean=2.0
+  - fiona=1.9.1
+  - folium=0.14.0
+  - geopandas=0.12.2
   - geoviews
-  - seaborn
-  - cartopy
-  - folium
-  - cmocean
-  - xhistogram
+  - holoviews=1.15.4
+  - hvplot=0.8.2
+  - jupyterlab=3.6.1
+  - netcdf4=1.6.3
+  - panel=0.14.4
+  - pillow=9.4.0
+  - proj=9.1.1
+  - seaborn=0.12.2
+  - xarray=2023.2.0
   - pip
   - pip:
-    - geojsoncontour
+    - geojson==3.0.1
+    - geojsoncontour==0.4.0
+
